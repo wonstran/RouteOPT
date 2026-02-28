@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from routeopt.core.solver import NightRoute, estimate_night_deadhead_miles, estimate_night_hours
 from routeopt.models.constraints import Constraints
 from routeopt.utils.geo import LatLon
