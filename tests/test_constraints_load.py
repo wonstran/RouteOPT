@@ -1,10 +1,7 @@
-from pathlib import Path
-
-import yaml
+from routeopt.core.config import load_constraints
 
 
-def test_constraints_example_is_valid_yaml():
-    p = Path("constraints.example.yaml")
-    data = yaml.safe_load(p.read_text(encoding="utf-8"))
-    assert data["depot"]["lat"]
-    assert data["limits"]["max_hours_per_night"] == 4.0
+def test_constraints_example_loads_with_schema():
+    c = load_constraints("constraints.example.yaml")
+    assert c.depot.lat
+    assert c.limits.max_hours_per_night == 4.0

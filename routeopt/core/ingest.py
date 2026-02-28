@@ -14,6 +14,27 @@ def _get(props: dict, *keys, default=None):
     return default
 
 
+def _coerce_bool(value, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value in (0, 0.0):
+            return False
+        if value in (1, 1.0):
+            return True
+        raise ValueError(f"Invalid boolean numeric: {value}")
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in ("true", "t", "yes", "y", "1"):
+            return True
+        if s in ("false", "f", "no", "n", "0", ""):
+            return False
+        raise ValueError(f"Invalid boolean string: {value}")
+    raise ValueError(f"Invalid boolean type: {type(value)}")
+
+
 def load_segments_geojson(path: str | Path, *, default_oneway: bool) -> list[Segment]:
     p = Path(path)
     data = json.loads(p.read_text(encoding="utf-8"))
@@ -39,7 +60,8 @@ def load_segments_geojson(path: str | Path, *, default_oneway: bool) -> list[Seg
         if speed_limit <= 0:
             raise ValueError(f"Invalid speed_limit for roadway_id={roadway_id}: {speed_limit}")
 
-        oneway = bool(_get(props, "oneway", default=default_oneway))
+        oneway_raw = _get(props, "oneway", default=None)
+        oneway = _coerce_bool(oneway_raw, default=default_oneway)
         bmp = _get(props, "bmp")
         emp = _get(props, "emp")
 
@@ -49,7 +71,12 @@ def load_segments_geojson(path: str | Path, *, default_oneway: bool) -> list[Seg
         if not coords_raw or len(coords_raw) < 2:
             raise ValueError(f"LineString must have >=2 coordinates (roadway_id={roadway_id})")
 
-        coords = [LatLon(lat=float(lat), lon=float(lon)) for lon, lat in coords_raw]
+        coords: list[LatLon] = []
+        for c in coords_raw:
+            if not isinstance(c, (list, tuple)) or len(c) < 2:
+                raise ValueError(f"Invalid coordinate in LineString (roadway_id={roadway_id}): {c}")
+            lon, lat = c[0], c[1]
+            coords.append(LatLon(lat=float(lat), lon=float(lon)))
 
         segs.append(
             Segment(

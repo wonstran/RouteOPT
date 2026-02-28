@@ -96,7 +96,14 @@ def greedy_plan(constraints: Constraints, blocks: list[ServiceBlock]) -> list[Ni
             nights[ni].blocks.insert(pos, blk)
             continue
 
-        # else open new night
+        # else open new night, but only if the block itself is schedulable
+        h_single = estimate_night_hours(constraints, depot, [blk])
+        if h_single > max_h:
+            raise ValueError(
+                f"Single service block cannot fit in a night (hours={h_single:.3f} > {max_h}). "
+                "Consider splitting geometry or adjusting constraints."
+            )
+
         if len(nights) + 1 > constraints.limits.max_nights:
             raise ValueError("Cannot schedule within max_nights constraint")
         nights.append(NightRoute(blocks=[blk]))
