@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from routeopt.core.routing import EuclideanRouting, RoutingEngine
 from routeopt.core.tasks import ServiceBlock
 from routeopt.models.constraints import Constraints
 from routeopt.utils.geo import LatLon
-from routeopt.core.routing import EuclideanRouting, RoutingEngine
 
 
 @dataclass
@@ -17,6 +17,17 @@ class Step:
 @dataclass
 class NightRoute:
     blocks: list[ServiceBlock] = field(default_factory=list)
+
+
+def _routing_engine(constraints: Constraints) -> RoutingEngine:
+    # Only euclidean implemented in-core; OSMnx engine to be added in follow-up PR.
+    mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
+    return EuclideanRouting(deadhead_speed_mph=mph)
+
+
+def _deadhead_leg(constraints: Constraints, a: LatLon, b: LatLon):
+    eng = _routing_engine(constraints)
+    return eng.dist_time(a, b)
 
 
 def _deadhead_hours(constraints: Constraints, miles: float) -> float:
@@ -39,31 +50,15 @@ def _loopback_hours(constraints: Constraints, block: ServiceBlock) -> float:
     return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
 
 
-
-
-def _routing_engine(constraints: Constraints) -> RoutingEngine:
-    # Only euclidean implemented in-core; OSMnx engine to be added in follow-up PR.
-    mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
-    return EuclideanRouting(deadhead_speed_mph=mph)
-
-
-def _deadhead_leg(constraints: Constraints, a: LatLon, b: LatLon):
-    eng = _routing_engine(constraints)
-    return eng.dist_time(a, b)
-
-
 def estimate_night_hours(
     constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
 ) -> float:
     if not blocks:
         return 0.0
     miles = 0.0
-    # depot -> first
     miles += _deadhead_leg(constraints, depot, blocks[0].start).distance_miles
-    # between blocks
     for a, b in zip(blocks, blocks[1:]):
         miles += _deadhead_leg(constraints, a.end, b.start).distance_miles
-    # last -> depot
     miles += _deadhead_leg(constraints, blocks[-1].end, depot).distance_miles
 
     deadhead_h = _deadhead_hours(constraints, miles)
@@ -73,7 +68,9 @@ def estimate_night_hours(
     return deadhead_h + service_h
 
 
-def estimate_night_deadhead_miles(depot: LatLon, blocks: list[ServiceBlock]) -> float:
+def estimate_night_deadhead_miles(
+    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
+) -> float:
     if not blocks:
         return 0.0
     miles = _deadhead_leg(constraints, depot, blocks[0].start).distance_miles
@@ -87,21 +84,19 @@ def greedy_plan(constraints: Constraints, blocks: list[ServiceBlock]) -> list[Ni
     depot = LatLon(lat=constraints.depot.lat, lon=constraints.depot.lon)
     max_h = constraints.limits.max_hours_per_night
 
-    # sort by service time descending as a simple difficulty heuristic
     blocks_sorted = sorted(blocks, key=lambda b: _service_hours(constraints, b), reverse=True)
 
     nights: list[NightRoute] = []
 
     for blk in blocks_sorted:
         best = None
-        # try insert into existing nights at best position
         for ni, night in enumerate(nights):
             for pos in range(len(night.blocks) + 1):
                 cand = night.blocks[:pos] + [blk] + night.blocks[pos:]
                 h = estimate_night_hours(constraints, depot, cand)
                 if h > max_h:
                     continue
-                dead_mi = estimate_night_deadhead_miles(depot, cand)
+                dead_mi = estimate_night_deadhead_miles(constraints, depot, cand)
                 if best is None or dead_mi < best[0]:
                     best = (dead_mi, ni, pos)
 
@@ -110,7 +105,6 @@ def greedy_plan(constraints: Constraints, blocks: list[ServiceBlock]) -> list[Ni
             nights[ni].blocks.insert(pos, blk)
             continue
 
-        # else open new night, but only if the block itself is schedulable
         h_single = estimate_night_hours(constraints, depot, [blk])
         if h_single > max_h:
             raise ValueError(
