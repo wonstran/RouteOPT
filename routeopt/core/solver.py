@@ -19,7 +19,9 @@ class NightRoute:
     blocks: list[ServiceBlock] = field(default_factory=list)
 
 
-def _build_engine(constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]) -> RoutingEngine:
+def _build_engine(
+    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
+) -> RoutingEngine:
     mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
     if constraints.routing_engine == "osmnx":
         pts: list[LatLon] = []

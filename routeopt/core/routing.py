@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+import math
+from typing import TYPE_CHECKING
 
 from routeopt.utils.geo import LatLon, haversine_miles
+
+if TYPE_CHECKING:  # pragma: no cover
+    import networkx as nx  # noqa: F401
+    import osmnx as ox  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -25,12 +31,9 @@ class EuclideanRouting:
 class OSMnxRouting:
     """OSMnx-based shortest path routing (distance + time).
 
-    This is an optional mode intended for more realistic deadhead legs.
+    Optional mode for realistic deadhead legs.
 
-    Notes:
-    - Requires the optional dependencies group: `pip install -e .[osm]`
-    - Builds an OSM drive graph covering the bbox of all task endpoints + depot,
-      with a configurable buffer.
+    Requires extras: `pip install -e '.[osm]'`
     """
 
     def __init__(
@@ -57,9 +60,10 @@ class OSMnxRouting:
         lats = [p.lat for p in all_pts]
         lons = [p.lon for p in all_pts]
 
-        # expand bbox by buffer miles (approx degrees)
+        # expand bbox by buffer miles (rough degrees)
         dlat = buffer_miles / 69.0
-        dlon = buffer_miles / (69.0 * max(1e-6, abs(__import__("math").cos(__import__("math").radians(sum(lats)/len(lats))))))
+        lat0 = sum(lats) / len(lats)
+        dlon = buffer_miles / (69.0 * max(1e-6, abs(math.cos(math.radians(lat0)))))
 
         north = max(lats) + dlat
         south = min(lats) - dlat
@@ -67,8 +71,9 @@ class OSMnxRouting:
         west = min(lons) - dlon
 
         self._G = ox.graph_from_bbox(north, south, east, west, network_type="drive")
+
         # add travel_time edge attribute (hours) using deadhead speed
-        for u, v, k, data in self._G.edges(keys=True, data=True):
+        for _u, _v, _k, data in self._G.edges(keys=True, data=True):
             length_m = float(data.get("length", 0.0))
             miles = length_m / 1609.344
             data["_dist_miles"] = miles
@@ -80,12 +85,10 @@ class OSMnxRouting:
 
     @lru_cache(maxsize=200_000)
     def _shortest_dist_time(self, a_node: int, b_node: int) -> DistTime:
-        # shortest by distance
         path = self._nx.shortest_path(self._G, a_node, b_node, weight="_dist_miles")
         dist = 0.0
         time_h = 0.0
         for u, v in zip(path, path[1:]):
-            # choose min over parallel edges
             edges = self._G.get_edge_data(u, v)
             best = None
             for _k, d in edges.items():
