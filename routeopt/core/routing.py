@@ -4,11 +4,9 @@ import importlib
 import math
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from routeopt.utils.geo import LatLon, haversine_miles
-
-from typing import Protocol
 
 
 class RoutingEngine(Protocol):
