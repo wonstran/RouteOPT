@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import importlib
+import math
 from dataclasses import dataclass
 from functools import lru_cache
-import math
 from typing import TYPE_CHECKING
 
 from routeopt.utils.geo import LatLon, haversine_miles
@@ -45,8 +46,8 @@ class OSMnxRouting:
         deadhead_speed_mph: float,
     ):
         try:
-            import osmnx as ox
-            import networkx as nx
+            ox = importlib.import_module("osmnx")
+            nx = importlib.import_module("networkx")
         except Exception as e:  # pragma: no cover
             raise RuntimeError(
                 "OSMnxRouting requires optional dependencies. Install with: pip install -e '.[osm]'"
@@ -60,7 +61,6 @@ class OSMnxRouting:
         lats = [p.lat for p in all_pts]
         lons = [p.lon for p in all_pts]
 
-        # expand bbox by buffer miles (rough degrees)
         dlat = buffer_miles / 69.0
         lat0 = sum(lats) / len(lats)
         dlon = buffer_miles / (69.0 * max(1e-6, abs(math.cos(math.radians(lat0)))))
@@ -72,7 +72,6 @@ class OSMnxRouting:
 
         self._G = ox.graph_from_bbox(north, south, east, west, network_type="drive")
 
-        # add travel_time edge attribute (hours) using deadhead speed
         for _u, _v, _k, data in self._G.edges(keys=True, data=True):
             length_m = float(data.get("length", 0.0))
             miles = length_m / 1609.344
