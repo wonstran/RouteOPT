@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from routeopt.core.routing import EuclideanRouting, RoutingEngine
+from routeopt.core.routing import EuclideanRouting, OSMnxRouting, RoutingEngine
 from routeopt.core.tasks import ServiceBlock
 from routeopt.models.constraints import Constraints
 from routeopt.utils.geo import LatLon
@@ -19,15 +19,22 @@ class NightRoute:
     blocks: list[ServiceBlock] = field(default_factory=list)
 
 
-def _routing_engine(constraints: Constraints) -> RoutingEngine:
-    # Only euclidean implemented in-core; OSMnx engine to be added in follow-up PR.
+def _build_engine(
+    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
+) -> RoutingEngine:
     mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
+    if constraints.routing_engine == "osmnx":
+        pts: list[LatLon] = []
+        for b in blocks:
+            pts.append(b.start)
+            pts.append(b.end)
+        return OSMnxRouting(
+            depot=depot,
+            points=pts,
+            buffer_miles=constraints.osm_buffer_miles,
+            deadhead_speed_mph=mph,
+        )
     return EuclideanRouting(deadhead_speed_mph=mph)
-
-
-def _deadhead_leg(constraints: Constraints, a: LatLon, b: LatLon):
-    eng = _routing_engine(constraints)
-    return eng.dist_time(a, b)
 
 
 def _deadhead_hours(constraints: Constraints, miles: float) -> float:
@@ -41,12 +48,11 @@ def _service_hours(constraints: Constraints, block: ServiceBlock) -> float:
 
 
 def _loopback_hours(constraints: Constraints, block: ServiceBlock) -> float:
-    # constant loopback per extra pass (routing mode not implemented in MVP)
     if block.passes_required <= 1:
         return 0.0
     if constraints.loopback.mode == "constant":
         return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
-    # routing mode placeholder: treat as constant until routing engine added
+    # routing mode placeholder
     return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
 
 
@@ -55,11 +61,14 @@ def estimate_night_hours(
 ) -> float:
     if not blocks:
         return 0.0
+
+    eng = _build_engine(constraints, depot, blocks)
+
     miles = 0.0
-    miles += _deadhead_leg(constraints, depot, blocks[0].start).distance_miles
+    miles += eng.dist_time(depot, blocks[0].start).distance_miles
     for a, b in zip(blocks, blocks[1:]):
-        miles += _deadhead_leg(constraints, a.end, b.start).distance_miles
-    miles += _deadhead_leg(constraints, blocks[-1].end, depot).distance_miles
+        miles += eng.dist_time(a.end, b.start).distance_miles
+    miles += eng.dist_time(blocks[-1].end, depot).distance_miles
 
     deadhead_h = _deadhead_hours(constraints, miles)
     service_h = sum(
@@ -73,10 +82,13 @@ def estimate_night_deadhead_miles(
 ) -> float:
     if not blocks:
         return 0.0
-    miles = _deadhead_leg(constraints, depot, blocks[0].start).distance_miles
+
+    eng = _build_engine(constraints, depot, blocks)
+
+    miles = eng.dist_time(depot, blocks[0].start).distance_miles
     for a, b in zip(blocks, blocks[1:]):
-        miles += _deadhead_leg(constraints, a.end, b.start).distance_miles
-    miles += _deadhead_leg(constraints, blocks[-1].end, depot).distance_miles
+        miles += eng.dist_time(a.end, b.start).distance_miles
+    miles += eng.dist_time(blocks[-1].end, depot).distance_miles
     return miles
 
 

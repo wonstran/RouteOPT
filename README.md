@@ -24,3 +24,12 @@ routeopt plan --input your.geojson --constraints constraints.yaml --output route
 
 ## Planning
 See `planning/PLAN_v3_1.md`.
+
+
+## OSM routing (optional)
+To use OSM-based deadhead distances:
+
+```bash
+pip install -e '.[osm]'
+# in constraints.yaml set: routing_engine: osmnx
+```
