@@ -10,17 +10,21 @@ limits:
 speed:
   service_factor: 1.0
   deadhead_factor: 1.0
+  deadhead_speed_mph: 45.0
 
 lane_split:
-  strategy: balanced  # lanes_A=ceil(total/2), lanes_B=floor(total/2)
+  strategy: balanced
 
 oneway:
   default: false
 
 loopback:
-  mode: constant      # constant | routing
+  mode: constant
   constant_seconds: 60
 
 objective:
   primary: min_deadhead_distance
   secondary: min_deadhead_time
+
+routing_engine: euclidean
+osm_buffer_miles: 2.0
