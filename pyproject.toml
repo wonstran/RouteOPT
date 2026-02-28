@@ -33,3 +33,9 @@ select = ['E','F','I']
 
 [tool.setuptools]
 packages = {find = {include = ['routeopt*'], exclude = ['planning*', 'tests*']}}
+
+osm = [
+  'osmnx>=1.9.4',
+  'geopandas>=0.14',
+  'pyproj>=3.6',
+]

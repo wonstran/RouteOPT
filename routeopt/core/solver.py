@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 
 from routeopt.core.tasks import ServiceBlock
 from routeopt.models.constraints import Constraints
-from routeopt.utils.geo import LatLon, haversine_miles
+from routeopt.utils.geo import LatLon
+from routeopt.core.routing import EuclideanRouting, RoutingEngine
 
 
 @dataclass
@@ -16,10 +17,6 @@ class Step:
 @dataclass
 class NightRoute:
     blocks: list[ServiceBlock] = field(default_factory=list)
-
-
-def _deadhead_miles(a: LatLon, b: LatLon) -> float:
-    return haversine_miles(a, b)
 
 
 def _deadhead_hours(constraints: Constraints, miles: float) -> float:
@@ -42,6 +39,19 @@ def _loopback_hours(constraints: Constraints, block: ServiceBlock) -> float:
     return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
 
 
+
+
+def _routing_engine(constraints: Constraints) -> RoutingEngine:
+    # Only euclidean implemented in-core; OSMnx engine to be added in follow-up PR.
+    mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
+    return EuclideanRouting(deadhead_speed_mph=mph)
+
+
+def _deadhead_leg(constraints: Constraints, a: LatLon, b: LatLon):
+    eng = _routing_engine(constraints)
+    return eng.dist_time(a, b)
+
+
 def estimate_night_hours(
     constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
 ) -> float:
@@ -49,12 +59,12 @@ def estimate_night_hours(
         return 0.0
     miles = 0.0
     # depot -> first
-    miles += _deadhead_miles(depot, blocks[0].start)
+    miles += _deadhead_leg(constraints, depot, blocks[0].start).distance_miles
     # between blocks
     for a, b in zip(blocks, blocks[1:]):
-        miles += _deadhead_miles(a.end, b.start)
+        miles += _deadhead_leg(constraints, a.end, b.start).distance_miles
     # last -> depot
-    miles += _deadhead_miles(blocks[-1].end, depot)
+    miles += _deadhead_leg(constraints, blocks[-1].end, depot).distance_miles
 
     deadhead_h = _deadhead_hours(constraints, miles)
     service_h = sum(
@@ -66,10 +76,10 @@ def estimate_night_hours(
 def estimate_night_deadhead_miles(depot: LatLon, blocks: list[ServiceBlock]) -> float:
     if not blocks:
         return 0.0
-    miles = _deadhead_miles(depot, blocks[0].start)
+    miles = _deadhead_leg(constraints, depot, blocks[0].start).distance_miles
     for a, b in zip(blocks, blocks[1:]):
-        miles += _deadhead_miles(a.end, b.start)
-    miles += _deadhead_miles(blocks[-1].end, depot)
+        miles += _deadhead_leg(constraints, a.end, b.start).distance_miles
+    miles += _deadhead_leg(constraints, blocks[-1].end, depot).distance_miles
     return miles
 
 
