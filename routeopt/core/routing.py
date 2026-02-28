@@ -8,6 +8,13 @@ from typing import TYPE_CHECKING
 
 from routeopt.utils.geo import LatLon, haversine_miles
 
+from typing import Protocol
+
+
+class RoutingEngine(Protocol):
+    def dist_time(self, a: LatLon, b: LatLon) -> DistTime: ...
+
+
 if TYPE_CHECKING:  # pragma: no cover
     import networkx as nx  # noqa: F401
     import osmnx as ox  # noqa: F401
