@@ -19,7 +19,9 @@ class NightRoute:
     blocks: list[ServiceBlock] = field(default_factory=list)
 
 
-def build_engine(constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]) -> RoutingEngine:
+def build_engine(
+    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
+) -> RoutingEngine:
     mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
     if constraints.routing_engine == "osmnx":
         pts: list[LatLon] = []
@@ -93,8 +95,8 @@ def estimate_night_deadhead(
         deadhead_leg(engine, blocks[-1].end, depot),
     ]
     return DistTime(
-        distance_miles=sum(l.distance_miles for l in legs),
-        duration_hours=sum(l.duration_hours for l in legs),
+        distance_miles=sum(leg.distance_miles for leg in legs),
+        duration_hours=sum(leg.duration_hours for leg in legs),
     )
 
 
@@ -126,7 +128,11 @@ def greedy_plan(constraints: Constraints, blocks: list[ServiceBlock]) -> list[Ni
     # Build one engine for the whole solve so we don't rebuild OSM graphs inside loops.
     engine = build_engine(constraints, depot, blocks)
 
-    blocks_sorted = sorted(blocks, key=lambda b: service_dist_time(constraints, b).duration_hours, reverse=True)
+    blocks_sorted = sorted(
+        blocks,
+        key=lambda b: service_dist_time(constraints, b).duration_hours,
+        reverse=True,
+    )
 
     nights: list[NightRoute] = []
 

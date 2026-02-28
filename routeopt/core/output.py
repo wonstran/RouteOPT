@@ -61,7 +61,9 @@ def routes_to_json(constraints: Constraints, nights: list[NightRoute]) -> dict:
                     {
                         "type": "deadhead",
                         "from": f"{b.roadway_id}:{b.direction}:end",
-                        "to": f"{night.blocks[i + 1].roadway_id}:{night.blocks[i + 1].direction}:start",
+                        "to": (
+                            f"{night.blocks[i + 1].roadway_id}:{night.blocks[i + 1].direction}:start"
+                        ),
                         "distance_miles": round(leg.distance_miles, 4),
                         "duration_hours": round(leg.duration_hours, 4),
                     }
