@@ -1,4 +1,14 @@
+from __future__ import annotations
+
 import argparse
+import json
+from pathlib import Path
+
+from routeopt.core.config import load_constraints
+from routeopt.core.ingest import load_segments_geojson
+from routeopt.core.output import routes_to_json
+from routeopt.core.solver import greedy_plan
+from routeopt.core.tasks import build_service_blocks
 
 
 def main(argv=None):
@@ -13,4 +23,10 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     if args.cmd == "plan":
-        raise SystemExit("MVP: planning pipeline not implemented yet")
+        constraints = load_constraints(args.constraints)
+        segments = load_segments_geojson(args.input, default_oneway=constraints.oneway.default)
+        blocks = build_service_blocks(segments)
+        nights = greedy_plan(constraints, blocks)
+        out = routes_to_json(constraints, nights)
+        Path(args.output).write_text(json.dumps(out, indent=2), encoding="utf-8")
+        return

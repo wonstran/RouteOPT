@@ -19,3 +19,17 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[project.optional-dependencies]
+dev = [
+  'pytest>=8.0',
+  'ruff>=0.6.0'
+]
+
+
+[tool.ruff.lint]
+select = ['E','F','I']
+
+
+[tool.setuptools]
+packages = {find = {include = ['routeopt*'], exclude = ['planning*', 'tests*']}}
