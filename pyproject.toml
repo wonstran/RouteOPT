@@ -21,6 +21,11 @@ testpaths = ["tests"]
 line-length = 100
 
 [project.optional-dependencies]
+osm = [
+  'osmnx>=1.9.4',
+  'geopandas>=0.14',
+  'pyproj>=3.6',
+]
 dev = [
   'pytest>=8.0',
   'ruff>=0.6.0'
@@ -33,3 +38,4 @@ select = ['E','F','I']
 
 [tool.setuptools]
 packages = {find = {include = ['routeopt*'], exclude = ['planning*', 'tests*']}}
+

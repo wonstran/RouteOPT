@@ -13,7 +13,7 @@ def routes_to_json(constraints: Constraints, nights: list[NightRoute]) -> dict:
     total_service = 0.0
 
     for idx, night in enumerate(nights, start=1):
-        dead_mi = estimate_night_deadhead_miles(depot, night.blocks)
+        dead_mi = estimate_night_deadhead_miles(constraints, depot, night.blocks)
         dur_h = estimate_night_hours(constraints, depot, night.blocks)
         total_dead += dead_mi
         total_service += sum(b.service_distance_miles for b in night.blocks)
