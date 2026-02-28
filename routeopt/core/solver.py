@@ -42,7 +42,9 @@ def _loopback_hours(constraints: Constraints, block: ServiceBlock) -> float:
     return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
 
 
-def estimate_night_hours(constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]) -> float:
+def estimate_night_hours(
+    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
+) -> float:
     if not blocks:
         return 0.0
     miles = 0.0
@@ -55,7 +57,9 @@ def estimate_night_hours(constraints: Constraints, depot: LatLon, blocks: list[S
     miles += _deadhead_miles(blocks[-1].end, depot)
 
     deadhead_h = _deadhead_hours(constraints, miles)
-    service_h = sum(_service_hours(constraints, b) + _loopback_hours(constraints, b) for b in blocks)
+    service_h = sum(
+        _service_hours(constraints, b) + _loopback_hours(constraints, b) for b in blocks
+    )
     return deadhead_h + service_h
 
 
