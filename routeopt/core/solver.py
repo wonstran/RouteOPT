@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from routeopt.core.routing import EuclideanRouting, OSMnxRouting, RoutingEngine
+from routeopt.core.routing import DistTime, EuclideanRouting, OSMnxRouting, RoutingEngine
 from routeopt.core.tasks import ServiceBlock
 from routeopt.models.constraints import Constraints
 from routeopt.utils.geo import LatLon
@@ -19,7 +19,7 @@ class NightRoute:
     blocks: list[ServiceBlock] = field(default_factory=list)
 
 
-def _build_engine(
+def build_engine(
     constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
 ) -> RoutingEngine:
     mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
@@ -37,66 +37,102 @@ def _build_engine(
     return EuclideanRouting(deadhead_speed_mph=mph)
 
 
-def _deadhead_hours(constraints: Constraints, miles: float) -> float:
-    mph = max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
-    return miles / mph
+def service_speed_mph(constraints: Constraints, block: ServiceBlock) -> float:
+    return max(1e-6, block.speed_limit_mph * min(1.0, constraints.speed.service_factor))
 
 
-def _service_hours(constraints: Constraints, block: ServiceBlock) -> float:
-    mph = max(1e-6, block.speed_limit_mph * min(1.0, constraints.speed.service_factor))
-    return block.service_distance_miles / mph
+def deadhead_speed_mph(constraints: Constraints) -> float:
+    return max(1e-6, constraints.speed.deadhead_speed_mph * constraints.speed.deadhead_factor)
 
 
-def _loopback_hours(constraints: Constraints, block: ServiceBlock) -> float:
-    if block.passes_required <= 1:
-        return 0.0
-    if constraints.loopback.mode == "constant":
-        return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
-    # routing mode placeholder
-    return (block.passes_required - 1) * (constraints.loopback.constant_seconds / 3600.0)
+def loopback_dist_time(
+    constraints: Constraints, engine: RoutingEngine, block: ServiceBlock
+) -> DistTime:
+    """Distance/time to reposition for the next pass of the same service block.
+
+    When loopback.mode=routing, compute shortest path from end->start.
+    When constant, use constant_seconds and 0 distance.
+    """
+
+    extra_passes = max(0, block.passes_required - 1)
+    if extra_passes == 0:
+        return DistTime(distance_miles=0.0, duration_hours=0.0)
+
+    if constraints.loopback.mode == "routing":
+        one = engine.dist_time(block.end, block.start)
+        return DistTime(
+            distance_miles=one.distance_miles * extra_passes,
+            duration_hours=one.duration_hours * extra_passes,
+        )
+
+    # constant
+    sec = float(constraints.loopback.constant_seconds) * extra_passes
+    return DistTime(distance_miles=0.0, duration_hours=sec / 3600.0)
+
+
+def service_dist_time(constraints: Constraints, block: ServiceBlock) -> DistTime:
+    mph = service_speed_mph(constraints, block)
+    hours = block.service_distance_miles / mph
+    return DistTime(distance_miles=block.service_distance_miles, duration_hours=hours)
+
+
+def deadhead_leg(engine: RoutingEngine, a: LatLon, b: LatLon) -> DistTime:
+    return engine.dist_time(a, b)
+
+
+def estimate_night_deadhead(
+    engine: RoutingEngine, depot: LatLon, blocks: list[ServiceBlock]
+) -> DistTime:
+    if not blocks:
+        return DistTime(distance_miles=0.0, duration_hours=0.0)
+
+    legs = [
+        deadhead_leg(engine, depot, blocks[0].start),
+        *(
+            deadhead_leg(engine, a.end, b.start)
+            for a, b in zip(blocks, blocks[1:])
+        ),
+        deadhead_leg(engine, blocks[-1].end, depot),
+    ]
+    return DistTime(
+        distance_miles=sum(leg.distance_miles for leg in legs),
+        duration_hours=sum(leg.duration_hours for leg in legs),
+    )
+
+
+def estimate_night_service(
+    constraints: Constraints, engine: RoutingEngine, blocks: list[ServiceBlock]
+) -> DistTime:
+    dist = 0.0
+    hours = 0.0
+    for b in blocks:
+        s = service_dist_time(constraints, b)
+        lb = loopback_dist_time(constraints, engine, b)
+        dist += s.distance_miles + lb.distance_miles
+        hours += s.duration_hours + lb.duration_hours
+    return DistTime(distance_miles=dist, duration_hours=hours)
 
 
 def estimate_night_hours(
-    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
+    constraints: Constraints, engine: RoutingEngine, depot: LatLon, blocks: list[ServiceBlock]
 ) -> float:
-    if not blocks:
-        return 0.0
-
-    eng = _build_engine(constraints, depot, blocks)
-
-    miles = 0.0
-    miles += eng.dist_time(depot, blocks[0].start).distance_miles
-    for a, b in zip(blocks, blocks[1:]):
-        miles += eng.dist_time(a.end, b.start).distance_miles
-    miles += eng.dist_time(blocks[-1].end, depot).distance_miles
-
-    deadhead_h = _deadhead_hours(constraints, miles)
-    service_h = sum(
-        _service_hours(constraints, b) + _loopback_hours(constraints, b) for b in blocks
-    )
-    return deadhead_h + service_h
-
-
-def estimate_night_deadhead_miles(
-    constraints: Constraints, depot: LatLon, blocks: list[ServiceBlock]
-) -> float:
-    if not blocks:
-        return 0.0
-
-    eng = _build_engine(constraints, depot, blocks)
-
-    miles = eng.dist_time(depot, blocks[0].start).distance_miles
-    for a, b in zip(blocks, blocks[1:]):
-        miles += eng.dist_time(a.end, b.start).distance_miles
-    miles += eng.dist_time(blocks[-1].end, depot).distance_miles
-    return miles
+    dead = estimate_night_deadhead(engine, depot, blocks)
+    svc = estimate_night_service(constraints, engine, blocks)
+    return dead.duration_hours + svc.duration_hours
 
 
 def greedy_plan(constraints: Constraints, blocks: list[ServiceBlock]) -> list[NightRoute]:
     depot = LatLon(lat=constraints.depot.lat, lon=constraints.depot.lon)
     max_h = constraints.limits.max_hours_per_night
 
-    blocks_sorted = sorted(blocks, key=lambda b: _service_hours(constraints, b), reverse=True)
+    # Build one engine for the whole solve so we don't rebuild OSM graphs inside loops.
+    engine = build_engine(constraints, depot, blocks)
+
+    blocks_sorted = sorted(
+        blocks,
+        key=lambda b: service_dist_time(constraints, b).duration_hours,
+        reverse=True,
+    )
 
     nights: list[NightRoute] = []
 
@@ -105,19 +141,19 @@ def greedy_plan(constraints: Constraints, blocks: list[ServiceBlock]) -> list[Ni
         for ni, night in enumerate(nights):
             for pos in range(len(night.blocks) + 1):
                 cand = night.blocks[:pos] + [blk] + night.blocks[pos:]
-                h = estimate_night_hours(constraints, depot, cand)
+                h = estimate_night_hours(constraints, engine, depot, cand)
                 if h > max_h:
                     continue
-                dead_mi = estimate_night_deadhead_miles(constraints, depot, cand)
-                if best is None or dead_mi < best[0]:
-                    best = (dead_mi, ni, pos)
+                dead = estimate_night_deadhead(engine, depot, cand)
+                if best is None or dead.distance_miles < best[0]:
+                    best = (dead.distance_miles, ni, pos)
 
         if best is not None:
             _, ni, pos = best
             nights[ni].blocks.insert(pos, blk)
             continue
 
-        h_single = estimate_night_hours(constraints, depot, [blk])
+        h_single = estimate_night_hours(constraints, engine, depot, [blk])
         if h_single > max_h:
             raise ValueError(
                 f"Single service block cannot fit in a night (hours={h_single:.3f} > {max_h}). "

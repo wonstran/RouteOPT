@@ -1,0 +1,25 @@
+depot:
+  name: USF CUTR
+  lat: 28.0585626
+  lon: -82.4163460
+
+limits:
+  max_hours_per_night: 4.0
+  max_nights: 200
+
+speed:
+  service_factor: 1.0
+  deadhead_factor: 1.0
+  deadhead_speed_mph: 45.0
+
+lane_split:
+  strategy: balanced
+
+oneway:
+  default: false
+
+loopback:
+  mode: routing
+  constant_seconds: 60
+
+routing_engine: euclidean

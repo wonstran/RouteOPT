@@ -33,3 +33,12 @@ To use OSM-based deadhead distances:
 pip install -e '.[osm]'
 # in constraints.yaml set: routing_engine: osmnx
 ```
+
+
+## Example
+
+```bash
+cp examples/constraints.euclidean.yaml constraints.yaml
+routeopt plan --input examples/sample.geojson --constraints constraints.yaml --output routes.json
+cat routes.json
+```

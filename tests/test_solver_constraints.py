@@ -13,9 +13,9 @@ def test_solver_rejects_single_block_over_limit():
             "limits": {"max_hours_per_night": 1.0, "max_nights": 200},
             "speed": {"service_factor": 1.0, "deadhead_factor": 1.0, "deadhead_speed_mph": 45.0},
             "loopback": {"mode": "constant", "constant_seconds": 0},
+            "routing_engine": "euclidean",
         }
     )
-    # 20 miles at 10 mph => 2 hours service
     blk = ServiceBlock(
         roadway_id="R1",
         direction="A",
