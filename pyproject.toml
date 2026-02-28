@@ -1,0 +1,21 @@
+[project]
+name = "routeopt"
+version = "0.1.0"
+description = "Roadway measurement route optimizer (nightly routing plans)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "pyyaml>=6.0",
+  "shapely>=2.0",
+  "networkx>=3.2",
+]
+
+[project.scripts]
+routeopt = "routeopt.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
