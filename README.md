@@ -3,9 +3,24 @@
 Roadway measurement route optimizer.
 
 ## Goal
-Generate nightly (<= 4 hours) measurement routes from a GeoJSON roadway network, minimizing deadhead distance under a max-nights constraint.
+Given a roadway network (GeoJSON) with roadway id, BMP/EMP, speed limit, and total lanes, generate nightly measurement routes (<= 4 hours/night) that minimize **deadhead distance**, subject to a **max nights** constraint.
 
-## CLI (planned)
+Key constraints:
+- Depot fixed at USF CUTR.
+- Lane-by-lane measurement, passes must be contiguous per (roadway_id, direction) block.
+- Service speed <= speed limit.
+
+## Status
+MVP scaffolding is in place. The `plan` command currently validates inputs and writes a stub output.
+
+## Quickstart
 ```bash
-routeopt plan --input roads.geojson --constraints constraints.yaml --output routes.json
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+
+cp constraints.example.yaml constraints.yaml
+routeopt plan --input your.geojson --constraints constraints.yaml --output routes.json
 ```
+
+## Planning
+See `planning/PLAN_v3_1.md`.
